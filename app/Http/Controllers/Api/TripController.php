@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\TripStoreRequest;
+use App\Http\Requests\TripUpdateRequest;
 use App\Http\Resources\TripResource;
 use App\Services\TripService;
 use Illuminate\Http\JsonResponse;
@@ -47,5 +48,30 @@ class TripController extends Controller
         }
 
         return new TripResource($trip);
+    }
+
+    public function update(TripUpdateRequest $request, int $id): TripResource
+    {
+        $trip = $this->tripService->update(
+            $id,
+            $request->validated()
+        );
+
+        return new TripResource($trip);
+    }
+
+    public function destroy(int $id): JsonResponse
+    {
+        $deleted = $this->tripService->delete($id);
+
+        if (! $deleted) {
+            return response()->json([
+                'message' => 'Поездка не найдена',
+            ], 404);
+        }
+
+        return response()->json([
+            'message' => 'Поездка удалена',
+        ]);
     }
 }
