@@ -30,11 +30,11 @@ return new class extends Migration
             ])->default('pending');
 
             $table->enum('pricing_type', [
-               'fixed',
-               'calculated',
+                'fixed',
+                'calculated',
             ]);
 
-            $table->decimal('estimated_price', 10, 2); 
+            $table->decimal('estimated_price', 10, 2);
 
             $table->decimal('final_price', 10, 2)
                 ->nullable();

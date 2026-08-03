@@ -1,49 +1,47 @@
-<?php 
+<?php
 
 namespace App\Repositories;
 
-use App\Models\Trip;
 use App\Contracts\TripRepositoryInterface;
-use Illuminate\Database\Eloquent\Collection; 
-
+use App\Models\Trip;
+use Illuminate\Database\Eloquent\Collection;
 
 class TripRepository implements TripRepositoryInterface
 {
     public function getAll(): Collection
     {
-        return Trip::all();
+        return Trip::query()
+            ->latest()
+            ->get();
     }
-
-
-    public function findById(int $id): ?Trip 
-    {
-        return Trip::find($id);
-    }
-
 
     public function create(array $data): Trip
     {
-        return Trip::create($data);
-    } 
+        return Trip::query()->create($data);
+    }
 
-
-    public function update(int $id, array $data): Trip 
+    public function findById(int $id): ?Trip
     {
-        $trip = Trip::findOrFail($id);
+        return Trip::query()->find($id);
+    }
+
+    public function update(int $id, array $data): Trip
+    {
+        $trip = Trip::query()->findOrFail($id);
 
         $trip->update($data);
 
-        return $trip;
+        return $trip->refresh();
     }
 
-
-    public function delete(int $id): bool 
+    public function delete(int $id): bool
     {
-        $trip = Trip::find($id);
-        if ($trip === null) {
-        return false;
-        }
-        return $trip->delete();
-    }
+        $trip = Trip::query()->find($id);
 
+        if ($trip === null) {
+            return false;
+        }
+
+        return (bool) $trip->delete();
+    }
 }

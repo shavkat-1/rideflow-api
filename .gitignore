@@ -25,3 +25,8 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+# Generated Swagger documentation
+/storage/api-docs/
+
+# Published vendor views
+/resources/views/vendor/
