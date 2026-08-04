@@ -11,6 +11,10 @@ interface TripRepositoryInterface
 {
     public function getAll(): Collection;
 
+    public function getByPassengerId(int $passengerId): Collection;
+
+    public function getByDriverId(int $driverId): Collection;
+
     public function findById(int $id): ?Trip;
 
     public function findByIdForUpdate(int $id): ?Trip;

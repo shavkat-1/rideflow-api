@@ -21,7 +21,9 @@ class TripApiTest extends TestCase
     {
         Queue::fake();
 
-        $passenger = User::factory()->create();
+        $passenger = User::factory()->create([
+            'role' => UserRole::Passenger,
+        ]);
 
         $response = $this->postJson('/api/trips', [
             'passenger_id' => $passenger->id,
@@ -31,7 +33,10 @@ class TripApiTest extends TestCase
 
         $response
             ->assertCreated()
-            ->assertJsonPath('message', 'Поездка создана. Подтверждение будет отправлено позже.')
+            ->assertJsonPath(
+                'message',
+                'Поездка создана. Подтверждение будет отправлено позже.'
+            )
             ->assertJsonPath('data.passenger_id', $passenger->id)
             ->assertJsonPath('data.pricing_type', 'fixed')
             ->assertJsonPath('data.estimated_price', 150);
@@ -42,20 +47,124 @@ class TripApiTest extends TestCase
             'estimated_price' => 150,
         ]);
 
-        Queue::assertPushed(
-            SendTripConfirmationJob::class
-        );
+        Queue::assertPushed(SendTripConfirmationJob::class);
     }
 
-    public function test_trips_can_be_listed(): void
+    public function test_trip_creation_requires_valid_data(): void
+    {
+        $response = $this->postJson('/api/trips', [
+            'passenger_id' => 999999,
+            'pricing_type' => 'unknown',
+            'estimated_price' => -100,
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'passenger_id',
+                'pricing_type',
+                'estimated_price',
+            ]);
+
+        $this->assertDatabaseCount('trips', 0);
+    }
+
+    public function test_guest_cannot_list_trips(): void
     {
         Trip::factory()->count(3)->create();
 
         $response = $this->getJson('/api/trips');
 
         $response
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Unauthenticated.');
+    }
+
+    public function test_passenger_can_only_list_own_trips(): void
+    {
+        $passenger = User::factory()->create([
+            'role' => UserRole::Passenger,
+        ]);
+
+        $otherPassenger = User::factory()->create([
+            'role' => UserRole::Passenger,
+        ]);
+
+        Trip::factory()->count(2)->create([
+            'passenger_id' => $passenger->id,
+        ]);
+
+        Trip::factory()->count(3)->create([
+            'passenger_id' => $otherPassenger->id,
+        ]);
+
+        Passport::actingAs($passenger);
+
+        $response = $this->getJson('/api/trips');
+
+        $response
             ->assertOk()
-            ->assertJsonCount(3, 'data');
+            ->assertJsonCount(2, 'data');
+
+        foreach ($response->json('data') as $trip) {
+            $this->assertSame(
+                $passenger->id,
+                $trip['passenger_id']
+            );
+        }
+    }
+
+    public function test_driver_can_only_list_assigned_trips(): void
+    {
+        $driver = User::factory()->create([
+            'role' => UserRole::Driver,
+        ]);
+
+        $otherDriver = User::factory()->create([
+            'role' => UserRole::Driver,
+        ]);
+
+        Trip::factory()->count(2)->create([
+            'driver_id' => $driver->id,
+            'status' => 'accepted',
+        ]);
+
+        Trip::factory()->count(3)->create([
+            'driver_id' => $otherDriver->id,
+            'status' => 'accepted',
+        ]);
+
+        Passport::actingAs($driver);
+
+        $response = $this->getJson('/api/trips');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        foreach ($response->json('data') as $trip) {
+            $this->assertSame(
+                $driver->id,
+                $trip['driver_id']
+            );
+        }
+    }
+
+    public function test_admin_can_list_all_trips(): void
+    {
+        $admin = User::factory()->create([
+            'role' => UserRole::Admin,
+        ]);
+
+        Trip::factory()->count(5)->create();
+
+        Passport::actingAs($admin);
+
+        $response = $this->getJson('/api/trips');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(5, 'data');
     }
 
     public function test_trip_can_be_shown(): void
@@ -78,39 +187,6 @@ class TripApiTest extends TestCase
         $response
             ->assertNotFound()
             ->assertJsonPath('message', 'Поездка не найдена');
-    }
-
-    public function test_missing_trip_cannot_be_deleted(): void
-    {
-        $passenger = User::factory()->create([
-            'role' => UserRole::Passenger,
-        ]);
-
-        Passport::actingAs($passenger);
-
-        $response = $this->deleteJson('/api/trips/999999');
-
-        $response
-            ->assertNotFound();
-    }
-
-    public function test_trip_creation_requires_valid_data(): void
-    {
-        $response = $this->postJson('/api/trips', [
-            'passenger_id' => 999999,
-            'pricing_type' => 'unknown',
-            'estimated_price' => -100,
-        ]);
-
-        $response
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors([
-                'passenger_id',
-                'pricing_type',
-                'estimated_price',
-            ]);
-
-        $this->assertDatabaseCount('trips', 0);
     }
 
     public function test_driver_can_accept_pending_trip(): void
@@ -206,7 +282,9 @@ class TripApiTest extends TestCase
 
         $response = $this->patchJson('/api/trips/999999/accept');
 
-        $response->assertNotFound();
+        $response
+            ->assertNotFound()
+            ->assertJsonPath('message', 'Поездка не найдена');
     }
 
     public function test_driver_cannot_accept_unavailable_trip(): void
@@ -241,93 +319,6 @@ class TripApiTest extends TestCase
             'id' => $trip->id,
             'driver_id' => $firstDriver->id,
             'status' => 'accepted',
-        ]);
-    }
-
-    public function test_unassigned_driver_cannot_update_trip(): void
-    {
-        $assignedDriver = User::factory()->create([
-            'role' => UserRole::Driver,
-        ]);
-
-        $otherDriver = User::factory()->create([
-            'role' => UserRole::Driver,
-        ]);
-
-        $trip = Trip::factory()->create([
-            'driver_id' => $assignedDriver->id,
-            'status' => 'accepted',
-        ]);
-
-        Passport::actingAs($otherDriver);
-
-        $response = $this->patchJson(
-            "/api/trips/{$trip->id}",
-            [
-                'status' => 'completed',
-                'final_price' => 220,
-            ]
-        );
-
-        $response->assertForbidden();
-
-        $this->assertDatabaseHas('trips', [
-            'id' => $trip->id,
-            'driver_id' => $assignedDriver->id,
-            'status' => 'accepted',
-        ]);
-    }
-
-    public function test_trip_owner_can_delete_trip(): void
-    {
-        $passenger = User::factory()->create([
-            'role' => UserRole::Passenger,
-        ]);
-
-        $trip = Trip::factory()->create([
-            'passenger_id' => $passenger->id,
-        ]);
-
-        Passport::actingAs($passenger);
-
-        $response = $this->deleteJson(
-            "/api/trips/{$trip->id}"
-        );
-
-        $response
-            ->assertOk()
-            ->assertJsonPath('message', 'Поездка удалена');
-
-        $this->assertDatabaseMissing('trips', [
-            'id' => $trip->id,
-        ]);
-    }
-
-    public function test_other_passenger_cannot_delete_trip(): void
-    {
-        $owner = User::factory()->create([
-            'role' => UserRole::Passenger,
-        ]);
-
-        $otherPassenger = User::factory()->create([
-            'role' => UserRole::Passenger,
-        ]);
-
-        $trip = Trip::factory()->create([
-            'passenger_id' => $owner->id,
-        ]);
-
-        Passport::actingAs($otherPassenger);
-
-        $response = $this->deleteJson(
-            "/api/trips/{$trip->id}"
-        );
-
-        $response->assertForbidden();
-
-        $this->assertDatabaseHas('trips', [
-            'id' => $trip->id,
-            'passenger_id' => $owner->id,
         ]);
     }
 
@@ -437,6 +428,95 @@ class TripApiTest extends TestCase
         ]);
     }
 
+    public function test_unassigned_driver_cannot_update_trip(): void
+    {
+        $assignedDriver = User::factory()->create([
+            'role' => UserRole::Driver,
+        ]);
+
+        $otherDriver = User::factory()->create([
+            'role' => UserRole::Driver,
+        ]);
+
+        $trip = Trip::factory()->create([
+            'driver_id' => $assignedDriver->id,
+            'status' => 'accepted',
+        ]);
+
+        Passport::actingAs($otherDriver);
+
+        $response = $this->patchJson(
+            "/api/trips/{$trip->id}",
+            [
+                'status' => 'completed',
+                'final_price' => 220,
+            ]
+        );
+
+        $response->assertForbidden();
+
+        $this->assertDatabaseHas('trips', [
+            'id' => $trip->id,
+            'driver_id' => $assignedDriver->id,
+            'status' => 'accepted',
+        ]);
+    }
+
+    public function test_trip_owner_can_delete_pending_trip(): void
+    {
+        $passenger = User::factory()->create([
+            'role' => UserRole::Passenger,
+        ]);
+
+        $trip = Trip::factory()->create([
+            'passenger_id' => $passenger->id,
+            'status' => 'pending',
+        ]);
+
+        Passport::actingAs($passenger);
+
+        $response = $this->deleteJson(
+            "/api/trips/{$trip->id}"
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('message', 'Поездка удалена');
+
+        $this->assertDatabaseMissing('trips', [
+            'id' => $trip->id,
+        ]);
+    }
+
+    public function test_other_passenger_cannot_delete_trip(): void
+    {
+        $owner = User::factory()->create([
+            'role' => UserRole::Passenger,
+        ]);
+
+        $otherPassenger = User::factory()->create([
+            'role' => UserRole::Passenger,
+        ]);
+
+        $trip = Trip::factory()->create([
+            'passenger_id' => $owner->id,
+            'status' => 'pending',
+        ]);
+
+        Passport::actingAs($otherPassenger);
+
+        $response = $this->deleteJson(
+            "/api/trips/{$trip->id}"
+        );
+
+        $response->assertForbidden();
+
+        $this->assertDatabaseHas('trips', [
+            'id' => $trip->id,
+            'passenger_id' => $owner->id,
+        ]);
+    }
+
     public function test_trip_owner_cannot_delete_accepted_trip(): void
     {
         $passenger = User::factory()->create([
@@ -460,5 +540,18 @@ class TripApiTest extends TestCase
             'id' => $trip->id,
             'status' => 'accepted',
         ]);
+    }
+
+    public function test_missing_trip_cannot_be_deleted(): void
+    {
+        $passenger = User::factory()->create([
+            'role' => UserRole::Passenger,
+        ]);
+
+        Passport::actingAs($passenger);
+
+        $response = $this->deleteJson('/api/trips/999999');
+
+        $response->assertNotFound();
     }
 }

@@ -17,6 +17,22 @@ final class TripRepository implements TripRepositoryInterface
             ->get();
     }
 
+    public function getByPassengerId(int $passengerId): Collection
+    {
+        return Trip::query()
+            ->where('passenger_id', $passengerId)
+            ->latest()
+            ->get();
+    }
+
+    public function getByDriverId(int $driverId): Collection
+    {
+        return Trip::query()
+            ->where('driver_id', $driverId)
+            ->latest()
+            ->get();
+    }
+
     public function findById(int $id): ?Trip
     {
         return Trip::query()->find($id);

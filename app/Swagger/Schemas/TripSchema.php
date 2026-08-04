@@ -30,7 +30,7 @@ final class TripSchema
     #[OA\Property(
         property: 'status',
         type: 'string',
-        enum: ['pending', 'in_progress', 'completed', 'cancelled'],
+        enum: ['pending', 'accepted', 'in_progress', 'completed', 'cancelled'],
         example: 'pending'
     )]
     public string $status;

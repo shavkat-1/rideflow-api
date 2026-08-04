@@ -8,4 +8,5 @@ enum UserRole: string
 {
     case Passenger = 'passenger';
     case Driver = 'driver';
+    case Admin = 'admin';
 }

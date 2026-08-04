@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Contracts\TripRepositoryInterface;
+use App\Enums\UserRole;
 use App\Jobs\SendTripConfirmationJob;
 use App\Models\Trip;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -21,12 +23,24 @@ final class TripService
         private readonly TripRepositoryInterface $tripRepository
     ) {}
 
-    public function getAll(): Collection
+    public function getTripsFor(User $user): Collection
     {
+        $cacheKey = $this->tripsListCacheKey($user);
+
         return Cache::remember(
-            self::TRIPS_CACHE_KEY,
+            $cacheKey,
             self::TRIPS_CACHE_TTL_SECONDS,
-            fn (): Collection => $this->tripRepository->getAll()
+            fn (): Collection => match ($user->role) {
+                UserRole::Admin => $this->tripRepository->getAll(),
+
+                UserRole::Driver => $this->tripRepository->getByDriverId(
+                    $user->id
+                ),
+
+                UserRole::Passenger => $this->tripRepository->getByPassengerId(
+                    $user->id
+                ),
+            }
         );
     }
 
@@ -117,5 +131,10 @@ final class TripService
         $this->clearListCache();
 
         Cache::forget($this->tripCacheKey($id));
+    }
+
+    private function tripsListCacheKey(User $user): string
+    {
+        return "trips:list:{$user->role->value}:{$user->id}";
     }
 }

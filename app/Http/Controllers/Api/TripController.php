@@ -20,10 +20,10 @@ class TripController extends Controller
         private readonly TripService $tripService
     ) {}
 
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
         return TripResource::collection(
-            $this->tripService->getAll()
+            $this->tripService->getTripsFor($request->user())
         );
     }
 

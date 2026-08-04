@@ -15,4 +15,9 @@ use OpenApi\Attributes as OA;
     url: 'http://localhost:8000',
     description: 'Локальный сервер'
 )]
+#[OA\SecurityScheme(
+    securityScheme: 'bearerAuth',
+    type: 'http',
+    scheme: 'bearer'
+)]
 final class OpenApi {}
