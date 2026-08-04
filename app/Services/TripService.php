@@ -9,6 +9,7 @@ use App\Jobs\SendTripConfirmationJob;
 use App\Models\Trip;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 final class TripService
 {
@@ -73,19 +74,27 @@ final class TripService
 
     public function acceptTrip(int $tripId, int $driverId): Trip
     {
-        $trip = $this->tripRepository->findById($tripId);
+        $acceptedTrip = DB::transaction(
+            function () use ($tripId, $driverId): Trip {
+                $trip = $this->tripRepository
+                    ->findByIdForUpdate($tripId);
 
-        if ($trip === null) {
-            abort(404, 'Поездка не найдена');
-        }
+                if ($trip === null) {
+                    abort(404, 'Поездка не найдена');
+                }
 
-        if ($trip->status !== 'pending') {
-            abort(409, 'Поездка уже недоступна для принятия');
-        }
+                if ($trip->status !== 'pending') {
+                    abort(
+                        409,
+                        'Поездка уже недоступна для принятия'
+                    );
+                }
 
-        $acceptedTrip = $this->tripRepository->accept(
-            $tripId,
-            $driverId
+                $trip->driver_id = $driverId;
+                $trip->status = 'accepted';
+
+                return $this->tripRepository->save($trip);
+            }
         );
 
         $this->clearTripCache($tripId);

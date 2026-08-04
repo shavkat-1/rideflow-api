@@ -13,11 +13,13 @@ interface TripRepositoryInterface
 
     public function findById(int $id): ?Trip;
 
+    public function findByIdForUpdate(int $id): ?Trip;
+
     public function create(array $data): Trip;
 
     public function update(int $id, array $data): Trip;
 
-    public function delete(int $id): bool;
+    public function save(Trip $trip): Trip;
 
-    public function accept(int $tripId, int $driverId): Trip;
+    public function delete(int $id): bool;
 }

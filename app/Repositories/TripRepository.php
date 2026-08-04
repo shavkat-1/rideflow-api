@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Repositories;
 
 use App\Contracts\TripRepositoryInterface;
 use App\Models\Trip;
 use Illuminate\Database\Eloquent\Collection;
 
-class TripRepository implements TripRepositoryInterface
+final class TripRepository implements TripRepositoryInterface
 {
     public function getAll(): Collection
     {
@@ -15,14 +17,23 @@ class TripRepository implements TripRepositoryInterface
             ->get();
     }
 
-    public function create(array $data): Trip
-    {
-        return Trip::query()->create($data);
-    }
-
     public function findById(int $id): ?Trip
     {
         return Trip::query()->find($id);
+    }
+
+    public function findByIdForUpdate(int $id): ?Trip
+    {
+        return Trip::query()
+            ->lockForUpdate()
+            ->find($id);
+    }
+
+    public function create(array $data): Trip
+    {
+        $trip = Trip::query()->create($data);
+
+        return $trip->refresh();
     }
 
     public function update(int $id, array $data): Trip
@@ -30,6 +41,13 @@ class TripRepository implements TripRepositoryInterface
         $trip = Trip::query()->findOrFail($id);
 
         $trip->update($data);
+
+        return $trip->refresh();
+    }
+
+    public function save(Trip $trip): Trip
+    {
+        $trip->save();
 
         return $trip->refresh();
     }
@@ -43,17 +61,5 @@ class TripRepository implements TripRepositoryInterface
         }
 
         return (bool) $trip->delete();
-    }
-
-    public function accept(int $tripId, int $driverId): Trip
-    {
-        $trip = Trip::query()->findOrFail($tripId);
-
-        $trip->update([
-            'driver_id' => $driverId,
-            'status' => 'accepted',
-        ]);
-
-        return $trip->refresh();
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Passport\ClientRepository;
@@ -23,6 +24,40 @@ class AuthApiTest extends TestCase
                 'Test Personal Access Client',
                 'users'
             );
+    }
+
+    public function test_user_can_register(): void
+    {
+        $response = $this->postJson('/api/register', [
+            'name' => 'Test Passenger',
+            'email' => 'passenger@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('message', 'Пользователь зарегистрирован')
+            ->assertJsonPath('token_type', 'Bearer')
+            ->assertJsonPath('user.name', 'Test Passenger')
+            ->assertJsonPath('user.email', 'passenger@example.com')
+            ->assertJsonPath('user.role', UserRole::Passenger->value)
+            ->assertJsonStructure([
+                'access_token',
+                'token_type',
+                'user' => [
+                    'id',
+                    'name',
+                    'email',
+                    'role',
+                ],
+            ]);
+
+        $this->assertDatabaseHas('users', [
+            'name' => 'Test Passenger',
+            'email' => 'passenger@example.com',
+            'role' => UserRole::Passenger->value,
+        ]);
     }
 
     public function test_user_can_login_with_valid_credentials(): void
@@ -51,6 +86,30 @@ class AuthApiTest extends TestCase
                     'email',
                 ],
             ]);
+    }
+
+    public function test_registration_requires_valid_data(): void
+    {
+        User::factory()->create([
+            'email' => 'existing@example.com',
+        ]);
+
+        $response = $this->postJson('/api/register', [
+            'name' => '',
+            'email' => 'existing@example.com',
+            'password' => '123',
+            'password_confirmation' => 'different',
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'name',
+                'email',
+                'password',
+            ]);
+
+        $this->assertDatabaseCount('users', 1);
     }
 
     public function test_user_cannot_login_with_invalid_credentials(): void
