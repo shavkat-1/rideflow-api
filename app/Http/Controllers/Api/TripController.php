@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\TripStoreRequest;
 use App\Http\Requests\TripUpdateRequest;
 use App\Http\Resources\TripResource;
+use App\Models\Trip;
 use App\Services\TripService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,19 +52,25 @@ class TripController extends Controller
         return new TripResource($trip);
     }
 
-    public function update(TripUpdateRequest $request, int $id): TripResource
-    {
-        $trip = $this->tripService->update(
-            $id,
+    public function update(
+        TripUpdateRequest $request,
+        Trip $trip
+    ): TripResource {
+        $this->authorize('update', $trip);
+
+        $updatedTrip = $this->tripService->update(
+            $trip->id,
             $request->validated()
         );
 
-        return new TripResource($trip);
+        return new TripResource($updatedTrip);
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(Trip $trip): JsonResponse
     {
-        $deleted = $this->tripService->delete($id);
+        $this->authorize('delete', $trip);
+
+        $deleted = $this->tripService->delete($trip->id);
 
         if (! $deleted) {
             return response()->json([
