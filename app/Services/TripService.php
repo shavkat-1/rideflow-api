@@ -71,6 +71,28 @@ final class TripService
         return $deleted;
     }
 
+    public function acceptTrip(int $tripId, int $driverId): Trip
+    {
+        $trip = $this->tripRepository->findById($tripId);
+
+        if ($trip === null) {
+            abort(404, 'Поездка не найдена');
+        }
+
+        if ($trip->status !== 'pending') {
+            abort(409, 'Поездка уже недоступна для принятия');
+        }
+
+        $acceptedTrip = $this->tripRepository->accept(
+            $tripId,
+            $driverId
+        );
+
+        $this->clearTripCache($tripId);
+
+        return $acceptedTrip;
+    }
+
     private function tripCacheKey(int $id): string // Создает уникальный ключ для каждой поездки
     {
         return "trips:{$id}";

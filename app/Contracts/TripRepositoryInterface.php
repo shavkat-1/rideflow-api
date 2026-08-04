@@ -18,4 +18,6 @@ interface TripRepositoryInterface
     public function update(int $id, array $data): Trip;
 
     public function delete(int $id): bool;
+
+    public function accept(int $tripId, int $driverId): Trip;
 }

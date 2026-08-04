@@ -10,6 +10,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/me', [AuthController::class, 'me'])
     ->middleware('auth:api');
 
+Route::patch('/trips/{id}/accept', [TripController::class, 'accept'])
+    ->middleware(['auth:api', 'driver']);
+
 Route::get('/trips', [TripController::class, 'index']);
 Route::post('/trips', [TripController::class, 'store']);
 Route::get('/trips/{id}', [TripController::class, 'show']);

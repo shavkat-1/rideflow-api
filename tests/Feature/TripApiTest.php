@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Enums\UserRole;
 use App\Jobs\SendTripConfirmationJob;
 use App\Models\Trip;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Laravel\Passport\Passport;
 use Tests\TestCase;
 
 class TripApiTest extends TestCase
@@ -144,5 +146,136 @@ class TripApiTest extends TestCase
             ]);
 
         $this->assertDatabaseCount('trips', 0);
+    }
+
+    public function test_driver_can_accept_pending_trip(): void
+    {
+        $driver = User::factory()->create([
+            'role' => UserRole::Driver,
+        ]);
+
+        $trip = Trip::factory()->create([
+            'driver_id' => null,
+            'status' => 'pending',
+        ]);
+
+        Passport::actingAs($driver);
+
+        $response = $this->patchJson(
+            "/api/trips/{$trip->id}/accept"
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.id', $trip->id)
+            ->assertJsonPath('data.driver_id', $driver->id)
+            ->assertJsonPath('data.status', 'accepted');
+
+        $this->assertDatabaseHas('trips', [
+            'id' => $trip->id,
+            'driver_id' => $driver->id,
+            'status' => 'accepted',
+        ]);
+    }
+
+    public function test_passenger_cannot_accept_trip(): void
+    {
+        $passenger = User::factory()->create([
+            'role' => UserRole::Passenger,
+        ]);
+
+        $trip = Trip::factory()->create([
+            'driver_id' => null,
+            'status' => 'pending',
+        ]);
+
+        Passport::actingAs($passenger);
+
+        $response = $this->patchJson(
+            "/api/trips/{$trip->id}/accept"
+        );
+
+        $response
+            ->assertForbidden()
+            ->assertJsonPath(
+                'message',
+                'Доступ разрешён только водителям'
+            );
+
+        $this->assertDatabaseHas('trips', [
+            'id' => $trip->id,
+            'driver_id' => null,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_guest_cannot_accept_trip(): void
+    {
+        $trip = Trip::factory()->create([
+            'driver_id' => null,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->patchJson(
+            "/api/trips/{$trip->id}/accept"
+        );
+
+        $response
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Unauthenticated.');
+
+        $this->assertDatabaseHas('trips', [
+            'id' => $trip->id,
+            'driver_id' => null,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_driver_cannot_accept_missing_trip(): void
+    {
+        $driver = User::factory()->create([
+            'role' => UserRole::Driver,
+        ]);
+
+        Passport::actingAs($driver);
+
+        $response = $this->patchJson('/api/trips/999999/accept');
+
+        $response->assertNotFound();
+    }
+
+    public function test_driver_cannot_accept_unavailable_trip(): void
+    {
+        $firstDriver = User::factory()->create([
+            'role' => UserRole::Driver,
+        ]);
+
+        $secondDriver = User::factory()->create([
+            'role' => UserRole::Driver,
+        ]);
+
+        $trip = Trip::factory()->create([
+            'driver_id' => $firstDriver->id,
+            'status' => 'accepted',
+        ]);
+
+        Passport::actingAs($secondDriver);
+
+        $response = $this->patchJson(
+            "/api/trips/{$trip->id}/accept"
+        );
+
+        $response
+            ->assertConflict()
+            ->assertJsonPath(
+                'message',
+                'Поездка уже недоступна для принятия'
+            );
+
+        $this->assertDatabaseHas('trips', [
+            'id' => $trip->id,
+            'driver_id' => $firstDriver->id,
+            'status' => 'accepted',
+        ]);
     }
 }

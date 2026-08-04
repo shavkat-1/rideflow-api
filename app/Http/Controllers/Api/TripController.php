@@ -10,6 +10,7 @@ use App\Http\Requests\TripUpdateRequest;
 use App\Http\Resources\TripResource;
 use App\Services\TripService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class TripController extends Controller
@@ -73,5 +74,15 @@ class TripController extends Controller
         return response()->json([
             'message' => 'Поездка удалена',
         ]);
+    }
+
+    public function accept(Request $request, int $id): TripResource
+    {
+        $trip = $this->tripService->acceptTrip(
+            $id,
+            $request->user()->id
+        );
+
+        return new TripResource($trip);
     }
 }

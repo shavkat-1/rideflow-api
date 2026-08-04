@@ -44,4 +44,16 @@ class TripRepository implements TripRepositoryInterface
 
         return (bool) $trip->delete();
     }
+
+    public function accept(int $tripId, int $driverId): Trip
+    {
+        $trip = Trip::query()->findOrFail($tripId);
+
+        $trip->update([
+            'driver_id' => $driverId,
+            'status' => 'accepted',
+        ]);
+
+        return $trip->refresh();
+    }
 }
