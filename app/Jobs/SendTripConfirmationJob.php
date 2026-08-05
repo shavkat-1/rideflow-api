@@ -1,14 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Jobs;
 
 use App\Models\Trip;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-class SendTripConfirmationJob implements ShouldQueue
+final class SendTripConfirmationJob implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
@@ -16,18 +19,31 @@ class SendTripConfirmationJob implements ShouldQueue
 
     public int $backoff = 60;
 
+    public int $timeout = 30;
+
+    public int $uniqueFor = 300;
+
     public function __construct(
-        public int $tripId
+        public readonly int $tripId
     ) {}
+
+    public function uniqueId(): string
+    {
+        return (string) $this->tripId;
+    }
+
+    public function tags(): array
+    {
+        return [
+            'trip:'.$this->tripId,
+            'trip-confirmation',
+        ];
+    }
 
     public function handle(): void
     {
-        $trip = Trip::find($this->tripId);
+        $trip = Trip::query()->find($this->tripId);
 
-        /*
-         * Поездка удалена — это не временная ошибка.
-         * Retry здесь не поможет.
-         */
         if ($trip === null) {
             Log::info('Trip confirmation skipped: trip not found', [
                 'trip_id' => $this->tripId,
@@ -36,10 +52,6 @@ class SendTripConfirmationJob implements ShouldQueue
             return;
         }
 
-        /*
-         * Job могла выполниться повторно.
-         * Если подтверждение уже отправляли — ничего не делаем.
-         */
         if ($trip->confirmation_sent_at !== null) {
             Log::info('Trip confirmation skipped: already sent', [
                 'trip_id' => $trip->id,
@@ -48,9 +60,6 @@ class SendTripConfirmationJob implements ShouldQueue
             return;
         }
 
-        /*
-         * Пока вместо настоящего Email используем лог.
-         */
         Log::info('Trip confirmation sent', [
             'trip_id' => $trip->id,
             'passenger_id' => $trip->passenger_id,
