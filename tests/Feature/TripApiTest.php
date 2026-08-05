@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Contracts\TripEventPublisherInterface;
 use App\Enums\UserRole;
 use App\Jobs\SendTripConfirmationJob;
 use App\Models\Trip;
@@ -12,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Passport\Passport;
+use Tests\Fakes\FakeTripEventPublisher;
 use Tests\TestCase;
 
 final class TripApiTest extends TestCase
@@ -23,6 +25,16 @@ final class TripApiTest extends TestCase
         parent::setUp();
 
         Cache::flush();
+
+        $this->app->singleton(
+            FakeTripEventPublisher::class,
+            fn (): FakeTripEventPublisher => new FakeTripEventPublisher
+        );
+
+        $this->app->bind(
+            TripEventPublisherInterface::class,
+            FakeTripEventPublisher::class
+        );
     }
 
     public function test_authenticated_passenger_can_create_trip(): void
@@ -61,6 +73,32 @@ final class TripApiTest extends TestCase
         ]);
 
         Queue::assertPushed(SendTripConfirmationJob::class);
+
+        $publisher = $this->app->make(
+            FakeTripEventPublisher::class
+        );
+
+        $this->assertCount(
+            1,
+            $publisher->publishedEvents()
+        );
+
+        $event = $publisher->publishedEvents()[0];
+
+        $this->assertSame(
+            $response->json('data.id'),
+            $event->tripId
+        );
+
+        $this->assertSame(
+            $passenger->id,
+            $event->passengerId
+        );
+
+        $this->assertSame(
+            'pending',
+            $event->status
+        );
     }
 
     public function test_guest_cannot_create_trip(): void

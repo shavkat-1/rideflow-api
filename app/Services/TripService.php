@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Contracts\TripEventPublisherInterface;
 use App\Contracts\TripRepositoryInterface;
 use App\Enums\UserRole;
+use App\Events\TripCreatedEventData;
 use App\Jobs\SendTripConfirmationJob;
 use App\Models\Trip;
 use App\Models\User;
@@ -15,20 +17,17 @@ use Illuminate\Support\Facades\DB;
 
 final class TripService
 {
-    private const TRIPS_CACHE_KEY = 'trips:list';
-
     private const TRIPS_CACHE_TTL_SECONDS = 300;
 
     public function __construct(
-        private readonly TripRepositoryInterface $tripRepository
+        private readonly TripRepositoryInterface $tripRepository,
+        private readonly TripEventPublisherInterface $tripEventPublisher
     ) {}
 
     public function getTripsFor(User $user): Collection
     {
-        $cacheKey = $this->tripsListCacheKey($user);
-
         return Cache::remember(
-            $cacheKey,
+            $this->tripsListCacheKey($user),
             self::TRIPS_CACHE_TTL_SECONDS,
             fn (): Collection => match ($user->role) {
                 UserRole::Admin => $this->tripRepository->getAll(),
@@ -46,13 +45,21 @@ final class TripService
 
     public function createTrip(array $data): Trip
     {
-        $trip = $this->tripRepository->create($data);
+        $trip = DB::transaction(function () use ($data): Trip {
+            $trip = $this->tripRepository->create($data);
 
-        $this->clearListCache();
+            SendTripConfirmationJob::dispatch($trip->id)
+                ->delay(now()->addSeconds(30))
+                ->afterCommit();
 
-        SendTripConfirmationJob::dispatch($trip->id)
-            ->delay(now()->addSeconds(30))
-            ->afterCommit();
+            return $trip;
+        });
+
+        $this->tripEventPublisher->publishTripCreated(
+            TripCreatedEventData::fromTrip($trip)
+        );
+
+        $this->clearListCacheForTrip($trip);
 
         return $trip;
     }
@@ -70,17 +77,23 @@ final class TripService
     {
         $trip = $this->tripRepository->update($id, $data);
 
-        $this->clearTripCache($id);
+        $this->clearTripCache($trip);
 
         return $trip;
     }
 
     public function delete(int $id): bool
     {
+        $trip = $this->tripRepository->findById($id);
+
+        if ($trip === null) {
+            return false;
+        }
+
         $deleted = $this->tripRepository->delete($id);
 
         if ($deleted) {
-            $this->clearTripCache($id);
+            $this->clearTripCache($trip);
         }
 
         return $deleted;
@@ -111,30 +124,52 @@ final class TripService
             }
         );
 
-        $this->clearTripCache($tripId);
+        $this->clearTripCache($acceptedTrip);
 
         return $acceptedTrip;
     }
 
-    private function tripCacheKey(int $id): string // Создает уникальный ключ для каждой поездки
+    private function tripCacheKey(int $id): string
     {
         return "trips:{$id}";
-    }
-
-    private function clearListCache(): void
-    {
-        Cache::forget(self::TRIPS_CACHE_KEY);
-    }
-
-    private function clearTripCache(int $id): void
-    {
-        $this->clearListCache();
-
-        Cache::forget($this->tripCacheKey($id));
     }
 
     private function tripsListCacheKey(User $user): string
     {
         return "trips:list:{$user->role->value}:{$user->id}";
+    }
+
+    private function clearTripCache(Trip $trip): void
+    {
+        Cache::forget($this->tripCacheKey($trip->id));
+
+        $this->clearListCacheForTrip($trip);
+    }
+
+    private function clearListCacheForTrip(Trip $trip): void
+    {
+        Cache::forget(
+            "trips:list:passenger:{$trip->passenger_id}"
+        );
+
+        if ($trip->driver_id !== null) {
+            Cache::forget(
+                "trips:list:driver:{$trip->driver_id}"
+            );
+        }
+
+        $this->clearAdminListCaches();
+    }
+
+    private function clearAdminListCaches(): void
+    {
+        User::query()
+            ->where('role', UserRole::Admin->value)
+            ->pluck('id')
+            ->each(
+                fn (int $adminId): bool => Cache::forget(
+                    "trips:list:admin:{$adminId}"
+                )
+            );
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\TripController;
+use App\Services\RequestCounter;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register']);
@@ -28,3 +29,14 @@ Route::middleware('auth:api')->group(function (): void {
     Route::delete('/trips/{trip}', [TripController::class, 'destroy'])
         ->whereNumber('trip');
 });
+
+// Это демонстрационный endpoint, поэтому я разрешил его только в local environment. В production он регистрироваться не будет.
+if (app()->environment('local')) {
+    Route::get('/demo/octane-counter', function (
+        RequestCounter $counter
+    ): array {
+        return [
+            'count' => $counter->increment(),
+        ];
+    });
+}
