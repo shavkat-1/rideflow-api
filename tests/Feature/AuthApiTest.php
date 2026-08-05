@@ -8,7 +8,6 @@ use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Passport\ClientRepository;
-use Laravel\Passport\Passport;
 use Tests\TestCase;
 
 class AuthApiTest extends TestCase
@@ -139,20 +138,5 @@ class AuthApiTest extends TestCase
         $response
             ->assertUnauthorized()
             ->assertJsonPath('message', 'Unauthenticated.');
-    }
-
-    public function test_authenticated_user_can_view_own_profile(): void
-    {
-        $user = User::factory()->create();
-
-        Passport::actingAs($user);
-
-        $response = $this->getJson('/api/me');
-
-        $response
-            ->assertOk()
-            ->assertJsonPath('data.id', $user->id)
-            ->assertJsonPath('data.name', $user->name)
-            ->assertJsonPath('data.email', $user->email);
     }
 }

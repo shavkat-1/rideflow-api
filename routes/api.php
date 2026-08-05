@@ -13,15 +13,18 @@ Route::middleware('auth:api')->group(function (): void {
     Route::get('/me', [AuthController::class, 'me']);
 
     Route::get('/trips', [TripController::class, 'index']);
-
-    Route::patch('/trips/{trip}', [TripController::class, 'update']);
-
-    Route::delete('/trips/{trip}', [TripController::class, 'destroy']);
+    Route::post('/trips', [TripController::class, 'store']);
 
     Route::patch('/trips/{id}/accept', [TripController::class, 'accept'])
+        ->whereNumber('id')
         ->middleware('driver');
+
+    Route::get('/trips/{trip}', [TripController::class, 'show'])
+        ->whereNumber('trip');
+
+    Route::patch('/trips/{trip}', [TripController::class, 'update'])
+        ->whereNumber('trip');
+
+    Route::delete('/trips/{trip}', [TripController::class, 'destroy'])
+        ->whereNumber('trip');
 });
-
-Route::post('/trips', [TripController::class, 'store']);
-
-Route::get('/trips/{id}', [TripController::class, 'show']);

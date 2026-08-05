@@ -10,7 +10,11 @@ final class TripEndpoints
 {
     #[OA\Get(
         path: '/api/trips',
-        summary: 'Получить список поездок',
+        summary: 'Получить список поездок пользователя',
+        description: 'Пассажир получает свои поездки, водитель — назначенные ему поездки, администратор — все поездки.',
+        security: [
+            ['bearerAuth' => []],
+        ],
         tags: ['Trips'],
         responses: [
             new OA\Response(
@@ -30,6 +34,10 @@ final class TripEndpoints
                 )
             ),
             new OA\Response(
+                response: 401,
+                description: 'Пользователь не авторизован'
+            ),
+            new OA\Response(
                 response: 500,
                 description: 'Внутренняя ошибка сервера'
             ),
@@ -38,12 +46,16 @@ final class TripEndpoints
     public function index(): void {}
 
     #[OA\Get(
-        path: '/api/trips/{id}',
+        path: '/api/trips/{trip}',
         summary: 'Получить одну поездку',
+        description: 'Поездку может просматривать её пассажир, назначенный водитель или администратор.',
+        security: [
+            ['bearerAuth' => []],
+        ],
         tags: ['Trips'],
         parameters: [
             new OA\Parameter(
-                name: 'id',
+                name: 'trip',
                 description: 'ID поездки',
                 in: 'path',
                 required: true,
@@ -68,6 +80,14 @@ final class TripEndpoints
                 )
             ),
             new OA\Response(
+                response: 401,
+                description: 'Пользователь не авторизован'
+            ),
+            new OA\Response(
+                response: 403,
+                description: 'Нет прав на просмотр этой поездки'
+            ),
+            new OA\Response(
                 response: 404,
                 description: 'Поездка не найдена'
             ),
@@ -82,6 +102,10 @@ final class TripEndpoints
     #[OA\Post(
         path: '/api/trips',
         summary: 'Создать поездку',
+        description: 'Создавать поездки может только авторизованный пассажир. passenger_id определяется автоматически по Bearer Token.',
+        security: [
+            ['bearerAuth' => []],
+        ],
         tags: ['Trips'],
         requestBody: new OA\RequestBody(
             required: true,
@@ -89,16 +113,10 @@ final class TripEndpoints
             content: new OA\JsonContent(
                 type: 'object',
                 required: [
-                    'passenger_id',
                     'pricing_type',
                     'estimated_price',
                 ],
                 properties: [
-                    new OA\Property(
-                        property: 'passenger_id',
-                        type: 'integer',
-                        example: 1
-                    ),
                     new OA\Property(
                         property: 'pricing_type',
                         type: 'string',
@@ -133,6 +151,14 @@ final class TripEndpoints
                         ),
                     ]
                 )
+            ),
+            new OA\Response(
+                response: 401,
+                description: 'Пользователь не авторизован'
+            ),
+            new OA\Response(
+                response: 403,
+                description: 'Создавать поездки могут только пассажиры'
             ),
             new OA\Response(
                 response: 422,

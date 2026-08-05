@@ -23,8 +23,6 @@ class TripStoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'passenger_id' => ['required', 'integer', 'exists:users,id'],
-
             'pricing_type' => ['required', 'string', 'in:fixed,calculated'],
 
             'estimated_price' => ['required', 'numeric', 'min:0'],

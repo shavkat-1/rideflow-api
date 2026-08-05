@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\TripStoreRequest;
 use App\Http\Requests\TripUpdateRequest;
@@ -29,9 +30,16 @@ class TripController extends Controller
 
     public function store(TripStoreRequest $request): JsonResponse
     {
-        $trip = $this->tripService->createTrip(
-            $request->validated()
-        );
+        $user = $request->user();
+
+        if ($user->role !== UserRole::Passenger) {
+            abort(403, 'Создавать поездки могут только пассажиры');
+        }
+
+        $data = $request->validated();
+        $data['passenger_id'] = $user->id;
+
+        $trip = $this->tripService->createTrip($data);
 
         return response()->json([
             'message' => 'Поездка создана. Подтверждение будет отправлено позже.',
@@ -39,15 +47,9 @@ class TripController extends Controller
         ], 201);
     }
 
-    public function show(int $id): TripResource|JsonResponse
+    public function show(Trip $trip): TripResource
     {
-        $trip = $this->tripService->findById($id);
-
-        if ($trip === null) {
-            return response()->json([
-                'message' => 'Поездка не найдена',
-            ], 404);
-        }
+        $this->authorize('view', $trip);
 
         return new TripResource($trip);
     }
